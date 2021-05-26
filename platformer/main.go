@@ -2,16 +2,16 @@ package main
 
 import (
 	"encoding/csv"
+	"fmt"
 	"image"
 	"image/color"
+	_ "image/png"
 	"io"
 	"math"
 	"math/rand"
 	"os"
 	"strconv"
 	"time"
-
-	_ "image/png"
 
 	"github.com/faiface/pixel"
 	"github.com/faiface/pixel/imdraw"
@@ -20,7 +20,48 @@ import (
 	"golang.org/x/image/colornames"
 )
 
+type platform struct {
+	rect  pixel.Rect
+	color color.Color
+}
+
+type gopherPhys struct {
+	gravity   float64
+	runSpeed  float64
+	jumpSpeed float64
+
+	rect   pixel.Rect
+	vel    pixel.Vec
+	ground bool
+}
+
+type animState int
+
+type gopherAnim struct {
+	sheet pixel.Picture
+	anims map[string][]pixel.Rect
+	rate  float64
+
+	state   animState
+	counter float64
+	dir     float64
+
+	frame pixel.Rect
+
+	sprite *pixel.Sprite
+}
+
+type goal struct {
+	pos    pixel.Vec
+	radius float64
+	step   float64
+
+	counter float64
+	cols    [5]pixel.RGBA
+}
+
 func loadAnimationSheet(sheetPath, descPath string, frameWidth float64) (sheet pixel.Picture, anims map[string][]pixel.Rect, err error) {
+	fmt.Println("[INFO] Loading animation sheets...")
 	// total hack, nicely format the error at the end, so I don't have to type it every time
 	defer func() {
 		if err != nil {
@@ -28,19 +69,24 @@ func loadAnimationSheet(sheetPath, descPath string, frameWidth float64) (sheet p
 		}
 	}()
 
-	// open and load the spritesheet
+	// open and load the sprite-sheet
 	sheetFile, err := os.Open(sheetPath)
 	if err != nil {
 		return nil, nil, err
 	}
-	defer sheetFile.Close()
+	defer func(sheetFile *os.File) {
+		err := sheetFile.Close()
+		if err != nil {
+
+		}
+	}(sheetFile)
 	sheetImg, _, err := image.Decode(sheetFile)
 	if err != nil {
 		return nil, nil, err
 	}
 	sheet = pixel.PictureDataFromImage(sheetImg)
 
-	// create a slice of frames inside the spritesheet
+	// create a slice of frames inside the sprite-sheet
 	var frames []pixel.Rect
 	for x := 0.0; x+frameWidth <= sheet.Bounds().Max.X; x += frameWidth {
 		frames = append(frames, pixel.R(
@@ -55,11 +101,16 @@ func loadAnimationSheet(sheetPath, descPath string, frameWidth float64) (sheet p
 	if err != nil {
 		return nil, nil, err
 	}
-	defer descFile.Close()
+	defer func(descFile *os.File) {
+		err := descFile.Close()
+		if err != nil {
+
+		}
+	}(descFile)
 
 	anims = make(map[string][]pixel.Rect)
 
-	// load the animation information, name and interval inside the spritesheet
+	// load the animation information, name and interval inside the sprite-sheet
 	desc := csv.NewReader(descFile)
 	for {
 		anim, err := desc.Read()
@@ -80,25 +131,10 @@ func loadAnimationSheet(sheetPath, descPath string, frameWidth float64) (sheet p
 	return sheet, anims, nil
 }
 
-type platform struct {
-	rect  pixel.Rect
-	color color.Color
-}
-
 func (p *platform) draw(imd *imdraw.IMDraw) {
 	imd.Color = p.color
 	imd.Push(p.rect.Min, p.rect.Max)
 	imd.Rectangle(0)
-}
-
-type gopherPhys struct {
-	gravity   float64
-	runSpeed  float64
-	jumpSpeed float64
-
-	rect   pixel.Rect
-	vel    pixel.Vec
-	ground bool
 }
 
 func (gp *gopherPhys) update(dt float64, ctrl pixel.Vec, platforms []platform) {
@@ -138,27 +174,11 @@ func (gp *gopherPhys) update(dt float64, ctrl pixel.Vec, platforms []platform) {
 	}
 }
 
-type animState int
-
 const (
 	idle animState = iota
 	running
 	jumping
 )
-
-type gopherAnim struct {
-	sheet pixel.Picture
-	anims map[string][]pixel.Rect
-	rate  float64
-
-	state   animState
-	counter float64
-	dir     float64
-
-	frame pixel.Rect
-
-	sprite *pixel.Sprite
-}
 
 func (ga *gopherAnim) update(dt float64, phys *gopherPhys) {
 	ga.counter += dt
@@ -225,15 +245,6 @@ func (ga *gopherAnim) draw(t pixel.Target, phys *gopherPhys) {
 	)
 }
 
-type goal struct {
-	pos    pixel.Vec
-	radius float64
-	step   float64
-
-	counter float64
-	cols    [5]pixel.RGBA
-}
-
 func (g *goal) update(dt float64) {
 	g.counter += dt
 	for g.counter > g.step {
@@ -258,11 +269,11 @@ again:
 	r := rand.Float64()
 	g := rand.Float64()
 	b := rand.Float64()
-	len := math.Sqrt(r*r + g*g + b*b)
-	if len == 0 {
+	squareLen := math.Sqrt(r*r + g*g + b*b)
+	if squareLen == 0 {
 		goto again
 	}
-	return pixel.RGB(r/len, g/len, b/len)
+	return pixel.RGB(r/squareLen, g/squareLen, b/squareLen)
 }
 
 func run() {
@@ -387,8 +398,10 @@ func run() {
 		canvas.Draw(win, pixel.IM.Moved(canvas.Bounds().Center()))
 		win.Update()
 	}
+	fmt.Println("[INFO] Game exited...")
 }
 
 func main() {
+	fmt.Println("[INFO] Launching Game...")
 	pixelgl.Run(run)
 }
